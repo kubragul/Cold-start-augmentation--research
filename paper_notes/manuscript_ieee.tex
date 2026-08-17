@@ -1,0 +1,72 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{hyperref}
+
+\title{Synthetic Time Series Augmentation for Cold-Start Trend Forecasting: A Finance Pilot Study}
+\author{
+\IEEEauthorblockN{Author Name}
+\IEEEauthorblockA{Department / University\\
+email@example.com}
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This pilot study evaluates whether a simple statistical continuation augmentation method improves cold-start forecasting for financial time series. Using 11 large-cap U.S. equities from 2020--2024, we create 1,419 rolling cold-start scenarios and compare baseline forecasting against augmented training with synthetic continuation points. Results show significant degradation under augmentation: mean MAPE increases from 6.4355 to 16.0382, with a paired mean difference of +9.6027. Primary Wilcoxon signed-rank testing and Benjamini-Hochberg FDR-adjusted inference both indicate significantly worsened performance.
+\end{abstract}
+
+\section{Introduction}
+Cold-start forecasting requires predictions from short observed histories. Synthetic augmentation may increase apparent data volume, but it can also distort local predictive structure. This work tests that trade-off empirically.
+
+\section{Data and Experimental Setup}
+Daily adjusted close prices were downloaded via yfinance for 11 tickers across technology, finance, consumer, and energy sectors over 2020-01-01 to 2024-12-31. Rolling cold-start windows of 4, 8, and 12 weeks were used with a 28-trading-day forecast horizon and a 28-observation rolling step, yielding 1,419 scenarios.
+
+\section{Methods}
+\subsection{Baselines}
+Naive, moving-average, and linear-trend forecasters are used as transparent reference models.
+
+\subsection{Statistical Continuation Augmentation}
+Synthetic points are generated from training-only linear trend plus Gaussian residual noise, then appended to the training sequence. Augmentation ratios are 0.5x, 1.0x, and 2.0x training length.
+
+\subsection{Evaluation and Inference}
+MAE, RMSE, and MAPE are reported. Paired comparisons are evaluated via Wilcoxon signed-rank (primary) and paired t-test (secondary), with Benjamini-Hochberg FDR correction across grouped tests.
+
+\section{Results}
+Baseline mean MAPE is 6.4355; augmented mean MAPE is 16.0382. Mean paired MAPE difference is +9.6027. Improvement occurs in only 20.91\% of paired comparisons. The least harmful ratio is 0.5x and the most harmful is 2.0x.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{../results/figures_revised/mape_difference_heatmap.png}
+\caption{Mean MAPE difference (augmented minus baseline). Positive values indicate degradation under augmentation.}
+\label{fig:heatmap}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{../results/figures_revised/improvement_rate_by_model_ratio.png}
+\caption{Improvement rate by model and augmentation ratio. Most settings remain below 50\%.}
+\label{fig:improvement}
+\end{figure}
+
+\section{Discussion}
+Findings support an endpoint-distortion mechanism: appending synthetic continuation values can overwrite or dominate local endpoint signals, especially for endpoint-sensitive baselines.
+
+\section{Limitations}
+This is a finance-only pilot with simple baselines. Rolling-window overlap weakens strict independence assumptions, so inferential results should be interpreted with that dependency in mind.
+
+\section{Conclusion}
+For this pilot, simple continuation-based synthetic augmentation significantly worsens cold-start financial forecasting. Future work should prioritize augmentation strategies that preserve endpoint structure and evaluate robustness with overlap-aware inference.
+
+\begin{thebibliography}{00}
+\bibitem{yfinance} Ran Aroussi, ``yfinance,'' \url{https://github.com/ranaroussi/yfinance}.
+\bibitem{wilcoxon} F. Wilcoxon, ``Individual Comparisons by Ranking Methods,'' \textit{Biometrics Bulletin}, 1945.
+\bibitem{bh} Y. Benjamini and Y. Hochberg, ``Controlling the False Discovery Rate,'' \textit{Journal of the Royal Statistical Society B}, 1995.
+\end{thebibliography}
+
+\end{document}
+

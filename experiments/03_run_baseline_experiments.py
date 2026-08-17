@@ -1,0 +1,179 @@
+"""Step 03: run baseline forecasting models on cold-start samples."""
+
+from __future__ import annotations
+
+import logging
+import sys
+from collections.abc import Callable
+from pathlib import Path
+
+import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.data.load_finance_data import load_config
+from src.evaluation.metrics import evaluate_forecast
+from src.models.forecasting_models import (
+    linear_trend_forecast,
+    moving_average_forecast,
+    naive_forecast,
+)
+
+ForecastFunction = Callable[[list[float], int], list[float]]
+
+
+def configure_logging() -> None:
+    """Configure clear console logging for reproducible experiment runs."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
+def model_registry() -> dict[str, ForecastFunction]:
+    """Return the baseline models available for the pilot experiment."""
+    return {
+        "naive": naive_forecast,
+        "moving_average": moving_average_forecast,
+        "linear_trend": linear_trend_forecast,
+    }
+
+
+def main() -> None:
+    configure_logging()
+    logger = logging.getLogger(__name__)
+
+    config = load_config(PROJECT_ROOT / "config.yaml")
+    metadata_path = PROJECT_ROOT / "results" / "tables" / "cold_start_scenarios.csv"
+    if not metadata_path.exists():
+        raise FileNotFoundError(
+            f"cold-start scenario metadata not found at {metadata_path}; "
+            "run experiments/02_create_cold_start_scenarios.py first"
+        )
+
+    output_dir = PROJECT_ROOT / config["outputs"]["tables"]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    baseline_results_path = output_dir / "baseline_results.csv"
+    baseline_predictions_path = output_dir / "baseline_predictions.csv"
+
+    scenarios = pd.read_csv(metadata_path)
+    available_models = model_registry()
+    configured_models = config["forecasting_models"]
+    unknown_models = sorted(set(configured_models) - set(available_models))
+    if unknown_models:
+        raise ValueError(f"unknown forecasting models in config: {unknown_models}")
+
+    logger.info("Loaded %d cold-start samples from %s", len(scenarios), metadata_path)
+    logger.info("Running baseline models: %s", ", ".join(configured_models))
+
+    result_rows = []
+    prediction_rows = []
+    processed_sample_count = 0
+    failure_count = 0
+
+    for scenario in scenarios.to_dict(orient="records"):
+        sample_id = scenario["sample_id"]
+        try:
+            # Metadata paths are stored relative to the project root; joining an
+            # already-absolute path is a no-op, so older metadata still loads.
+            train = pd.read_csv(PROJECT_ROOT / scenario["train_path"])
+            test = pd.read_csv(PROJECT_ROOT / scenario["test_path"])
+            train_series = train["y"].tolist()
+            y_true = test["y"].tolist()
+            forecast_horizon = len(y_true)
+        except Exception as exc:
+            failure_count += 1
+            logger.exception("Failed to load sample %s: %s", sample_id, exc)
+            continue
+
+        processed_sample_count += 1
+
+        for model_name in configured_models:
+            try:
+                # Academic leakage guard: baseline models receive only the
+                # training-window target series. Test values are used below only
+                # after prediction, when computing evaluation metrics.
+                y_pred = available_models[model_name](train_series, forecast_horizon)
+                if len(y_pred) != forecast_horizon:
+                    raise ValueError(
+                        f"model returned {len(y_pred)} predictions for horizon {forecast_horizon}"
+                    )
+
+                metrics = evaluate_forecast(y_true, y_pred)
+                result_rows.append(
+                    {
+                        "sample_id": sample_id,
+                        "ticker": scenario["ticker"],
+                        "sector": scenario["sector"],
+                        "cold_start_weeks": int(scenario["cold_start_weeks"]),
+                        "model": model_name,
+                        "augmentation_method": "none",
+                        "MAE": metrics["MAE"],
+                        "RMSE": metrics["RMSE"],
+                        "MAPE": metrics["MAPE"],
+                    }
+                )
+
+                for date, actual, predicted in zip(test["date"], y_true, y_pred):
+                    prediction_rows.append(
+                        {
+                            "sample_id": sample_id,
+                            "ticker": scenario["ticker"],
+                            "sector": scenario["sector"],
+                            "cold_start_weeks": int(scenario["cold_start_weeks"]),
+                            "date": date,
+                            "y_true": actual,
+                            "y_pred": predicted,
+                            "model": model_name,
+                            "augmentation_method": "none",
+                        }
+                    )
+            except Exception as exc:
+                failure_count += 1
+                logger.exception("Sample %s failed for model %s: %s", sample_id, model_name, exc)
+
+    result_columns = [
+        "sample_id",
+        "ticker",
+        "sector",
+        "cold_start_weeks",
+        "model",
+        "augmentation_method",
+        "MAE",
+        "RMSE",
+        "MAPE",
+    ]
+    prediction_columns = [
+        "sample_id",
+        "ticker",
+        "sector",
+        "cold_start_weeks",
+        "date",
+        "y_true",
+        "y_pred",
+        "model",
+        "augmentation_method",
+    ]
+    pd.DataFrame(result_rows, columns=result_columns).to_csv(baseline_results_path, index=False)
+    pd.DataFrame(prediction_rows, columns=prediction_columns).to_csv(
+        baseline_predictions_path,
+        index=False,
+    )
+
+    logger.info("Processed %d samples", processed_sample_count)
+    logger.info("Wrote %d sample-model metric rows to %s", len(result_rows), baseline_results_path)
+    logger.info(
+        "Wrote %d prediction rows to %s",
+        len(prediction_rows),
+        baseline_predictions_path,
+    )
+    if failure_count:
+        logger.warning("Completed with %d logged failures", failure_count)
+    else:
+        logger.info("Completed with no sample/model failures")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,12 @@
+ticker,sector,number_of_observations,first_date,last_date,missing_values,percentage_missing
+AAPL,technology,1257,2020-01-02,2024-12-30,0,0.0
+MSFT,technology,1257,2020-01-02,2024-12-30,0,0.0
+NVDA,technology,1257,2020-01-02,2024-12-30,0,0.0
+JPM,finance,1257,2020-01-02,2024-12-30,0,0.0
+BAC,finance,1257,2020-01-02,2024-12-30,0,0.0
+GS,finance,1257,2020-01-02,2024-12-30,0,0.0
+WMT,consumer,1257,2020-01-02,2024-12-30,0,0.0
+COST,consumer,1257,2020-01-02,2024-12-30,0,0.0
+TGT,consumer,1257,2020-01-02,2024-12-30,0,0.0
+XOM,energy,1257,2020-01-02,2024-12-30,0,0.0
+CVX,energy,1257,2020-01-02,2024-12-30,0,0.0

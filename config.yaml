@@ -1,0 +1,55 @@
+dataset:
+  domain: finance
+  source: yfinance
+  start_date: 2020-01-01
+  end_date: 2024-12-31
+
+tickers:
+  technology:
+    - AAPL
+    - MSFT
+    - NVDA
+  finance:
+    - JPM
+    - BAC
+    - GS
+  consumer:
+    - WMT
+    - COST
+    - TGT
+  energy:
+    - XOM
+    - CVX
+
+cold_start_windows_weeks:
+  - 4
+  - 8
+  - 12
+
+forecast_horizon_days: 28
+rolling_step_days: 28
+
+forecasting_models:
+  - naive
+  - moving_average
+  - linear_trend
+
+augmentation_methods:
+  - none
+  - statistical
+
+metrics:
+  - MAE
+  - RMSE
+  - MAPE
+
+statistical_tests:
+  - wilcoxon_signed_rank
+  - paired_t_test
+
+random_seed: 42
+
+outputs:
+  tables: results/tables
+  figures: results/figures
+  tests: results/statistical_tests
