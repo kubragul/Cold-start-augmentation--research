@@ -15,7 +15,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from src.augmentation.statistical_augmentation import generate_statistical_synthetic_series
+from src.augmentation.statistical_augmentation import (
+    augmented_ensemble_forecast,
+    generate_endpoint_preserving_histories,
+)
 from src.models.forecasting_models import (
     linear_trend_forecast,
     moving_average_forecast,
@@ -108,7 +111,7 @@ def augmentation_mape_by_ratio_window(augmented: pd.DataFrame) -> plt.Figure:
     grid.set_axis_labels("Augmentation ratio", "Mean MAPE")
     grid.set_titles("{col_name}")
     grid.legend.set_title("Cold-start weeks")
-    grid.fig.suptitle("Augmented MAPE Increases with Larger Synthetic Continuations", y=1.03, fontsize=13)
+    grid.fig.suptitle("Augmented MAPE by Ensemble Size and Cold-Start Window", y=1.03, fontsize=13)
     return grid.fig
 
 
@@ -249,7 +252,7 @@ def example_forecast_case(
     scenarios: pd.DataFrame,
     random_seed: int,
 ) -> plt.Figure:
-    """Plot one case with train, synthetic continuation, test, and forecasts."""
+    """Plot one aligned synthetic history with baseline and ensemble forecasts."""
     sample_id = comparison_row["sample_id"]
     model_name = comparison_row["model"]
     augmentation_ratio = float(comparison_row["augmentation_ratio"])
@@ -262,26 +265,31 @@ def example_forecast_case(
     train_series = train["y"].astype(float).tolist()
     test_series = test["y"].astype(float).tolist()
     forecast_horizon = len(test_series)
-    n_synthetic_points = int(round(len(train_series) * augmentation_ratio))
-    synthetic = generate_statistical_synthetic_series(
+    n_synthetic_series = int(round(len(train_series) * augmentation_ratio))
+    seed = random_seed + scenario_index * 100 + ratio_index
+    synthetic_histories = generate_endpoint_preserving_histories(
         train_series,
-        n_synthetic_points=n_synthetic_points,
-        random_seed=random_seed + scenario_index * 100 + ratio_index,
+        n_synthetic_series=n_synthetic_series,
+        random_seed=seed,
     )
-    augmented_train = train_series + synthetic
     baseline_pred = MODEL_FUNCTIONS[model_name](train_series, forecast_horizon)
-    augmented_pred = MODEL_FUNCTIONS[model_name](augmented_train, forecast_horizon)
+    augmented_pred = augmented_ensemble_forecast(
+        train_series,
+        forecast_horizon,
+        MODEL_FUNCTIONS[model_name],
+        n_synthetic_series,
+        seed,
+    )
 
     train_x = list(range(len(train_series)))
-    synthetic_x = list(range(len(train_series), len(train_series) + len(synthetic)))
     test_x = list(range(len(train_series), len(train_series) + forecast_horizon))
 
     fig, ax = plt.subplots(figsize=(10, 5.5))
     ax.plot(train_x, train_series, label="Real training data", color="#4c78a8", linewidth=2)
     ax.plot(
-        synthetic_x,
-        synthetic,
-        label="Synthetic continuation",
+        train_x,
+        synthetic_histories[0],
+        label="Example aligned synthetic history",
         color="#f58518",
         linewidth=2,
         linestyle="--",

@@ -44,7 +44,7 @@ def main() -> None:
 
     config = load_config(PROJECT_ROOT / "config.yaml")
     tables_dir = PROJECT_ROOT / config["outputs"]["tables"]
-    figures_dir = PROJECT_ROOT / "results" / "figures_revised"
+    figures_dir = PROJECT_ROOT / "results" / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     data = load_inputs(tables_dir, PROJECT_ROOT / config["outputs"]["tests"])
@@ -62,8 +62,8 @@ def main() -> None:
             "augmentation_mape_by_ratio_window",
             augmentation_mape_by_ratio_window(data["augmentation"]),
             "Augmented MAPE by augmentation ratio and cold-start window",
-            "Mean MAPE under statistical continuation augmentation. Larger augmentation ratios generally produce higher errors.",
-            "Shows that larger synthetic continuation blocks worsen performance.",
+            "Mean MAPE under endpoint-preserving residual-bootstrap augmentation.",
+            "Compares ensemble sizes while keeping every forecast origin aligned.",
         ),
         (
             "mape_difference_heatmap",
@@ -77,14 +77,14 @@ def main() -> None:
             improvement_rate_by_model_ratio(data["diagnostic_matrix"]),
             "Improvement rate by model and augmentation ratio",
             "Fraction of paired comparisons in which augmented MAPE was lower than baseline MAPE.",
-            "Shows that augmentation improves only a minority of comparisons.",
+            "Shows the paired improvement frequency by model and ensemble size.",
         ),
         (
             "sector_level_mape_difference",
             sector_level_mape_difference(data["comparison"]),
             "Sector-level MAPE difference",
             "Mean MAPE difference by sector and augmentation ratio. Positive values indicate degradation under augmentation.",
-            "Compares sector-level degradation while keeping augmentation ratio separate.",
+            "Compares sector-level effects while keeping augmentation ratio separate.",
         ),
         (
             "baseline_vs_augmented_distribution",
@@ -98,7 +98,7 @@ def main() -> None:
             baseline_vs_augmented_distribution(data["comparison"], zoomed=True),
             "Distribution of baseline and augmented MAPE, zoomed",
             "Boxplots compare baseline and augmented MAPE with the display limited to 0-40 MAPE. Extreme values are excluded only visually, not analytically.",
-            "Shows the central distribution while preserving the negative-result interpretation and retaining outliers in analysis tables.",
+            "Shows the central distribution while retaining all outliers in analysis tables.",
         ),
     ]
 
@@ -113,15 +113,15 @@ def main() -> None:
                 "example_forecast_failure_case",
                 example_forecast_case(failure_case, data["scenarios"], int(config["random_seed"])),
                 "Representative forecast failure case",
-                "Example where statistical continuation augmentation strongly increased MAPE. Synthetic continuation values visibly shift the forecast away from the true test path.",
-                "Visually explains how continuation augmentation can distort forecasts.",
+                "Example where endpoint-preserving augmentation increased MAPE despite improving the overall mean.",
+                "Shows that the average benefit does not extend to every scenario.",
             ),
             (
                 "example_forecast_improvement_case",
                 example_forecast_case(improvement_case, data["scenarios"], int(config["random_seed"])),
                 "Representative forecast improvement case",
-                "Example where statistical continuation augmentation reduced MAPE. Such cases occur, but they are a minority in this pilot.",
-                "Shows that improvement occurs in some cases but is not dominant.",
+                "Example where endpoint-preserving augmentation reduced MAPE.",
+                "Illustrates how aligned synthetic-history ensembling can improve a forecast.",
             ),
         ]
     )
@@ -142,9 +142,11 @@ def main() -> None:
         )
         logger.info("Saved %s as PNG and PDF", figure_id)
 
-    captions_path = tables_dir / "figure_captions_revised.csv"
-    pd.DataFrame(captions).to_csv(captions_path, index=False)
-    logger.info("Wrote figure captions to %s", captions_path)
+    captions_frame = pd.DataFrame(captions)
+    for filename in ("figure_captions.csv", "figure_captions_revised.csv"):
+        captions_path = tables_dir / filename
+        captions_frame.to_csv(captions_path, index=False)
+        logger.info("Wrote figure captions to %s", captions_path)
 
 
 def _relative_to_root(path: Path) -> Path:

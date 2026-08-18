@@ -12,7 +12,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.augmentation.statistical_augmentation import generate_statistical_synthetic_series
+from src.augmentation.statistical_augmentation import augmented_ensemble_forecast
 from src.data.load_finance_data import load_config
 from src.evaluation.metrics import evaluate_forecast
 from src.models.forecasting_models import (
@@ -95,30 +95,20 @@ def main() -> None:
         processed_sample_count += 1
 
         for ratio_index, augmentation_ratio in enumerate(AUGMENTATION_RATIOS):
-            n_synthetic_points = int(round(len(train_series) * augmentation_ratio))
-            try:
-                # Academic leakage guard: synthetic data are generated from the
-                # training series only. The unchanged test series is used later
-                # only for forecast evaluation.
-                synthetic_values = generate_statistical_synthetic_series(
-                    train_series=train_series,
-                    n_synthetic_points=n_synthetic_points,
-                    random_seed=random_seed + scenario_index * 100 + ratio_index,
-                )
-                augmented_train_series = train_series + synthetic_values
-            except Exception as exc:
-                failure_count += 1
-                logger.exception(
-                    "Sample %s failed during augmentation ratio %.1f: %s",
-                    sample_id,
-                    augmentation_ratio,
-                    exc,
-                )
-                continue
+            n_synthetic_series = int(round(len(train_series) * augmentation_ratio))
 
             for model_name in configured_models:
                 try:
-                    y_pred = available_models[model_name](augmented_train_series, forecast_horizon)
+                    # Every synthetic history occupies the same dates as the
+                    # real training window and retains its endpoints. Forecasts
+                    # therefore all begin at the true test-window origin.
+                    y_pred = augmented_ensemble_forecast(
+                        train_series=train_series,
+                        forecast_horizon=forecast_horizon,
+                        forecast_function=available_models[model_name],
+                        n_synthetic_series=n_synthetic_series,
+                        random_seed=random_seed + scenario_index * 100 + ratio_index,
+                    )
                     if len(y_pred) != forecast_horizon:
                         raise ValueError(
                             f"model returned {len(y_pred)} predictions for horizon {forecast_horizon}"
@@ -134,7 +124,7 @@ def main() -> None:
                             "model": model_name,
                             "augmentation_method": "statistical",
                             "augmentation_ratio": augmentation_ratio,
-                            "n_synthetic_points": n_synthetic_points,
+                            "n_synthetic_series": n_synthetic_series,
                             "MAE": metrics["MAE"],
                             "RMSE": metrics["RMSE"],
                             "MAPE": metrics["MAPE"],
@@ -154,7 +144,7 @@ def main() -> None:
                                 "model": model_name,
                                 "augmentation_method": "statistical",
                                 "augmentation_ratio": augmentation_ratio,
-                                "n_synthetic_points": n_synthetic_points,
+                                "n_synthetic_series": n_synthetic_series,
                             }
                         )
                 except Exception as exc:
@@ -175,7 +165,7 @@ def main() -> None:
         "model",
         "augmentation_method",
         "augmentation_ratio",
-        "n_synthetic_points",
+        "n_synthetic_series",
         "MAE",
         "RMSE",
         "MAPE",
@@ -191,7 +181,7 @@ def main() -> None:
         "model",
         "augmentation_method",
         "augmentation_ratio",
-        "n_synthetic_points",
+        "n_synthetic_series",
     ]
     pd.DataFrame(result_rows, columns=result_columns).to_csv(
         augmentation_results_path,

@@ -70,7 +70,7 @@ def create_paired_comparison(baseline: pd.DataFrame, augmented: pd.DataFrame) ->
     baseline_columns = PAIR_KEYS + ["MAE", "RMSE", "MAPE"]
     augmented_columns = PAIR_KEYS + [
         "augmentation_ratio",
-        "n_synthetic_points",
+        "n_synthetic_series",
         "MAE",
         "RMSE",
         "MAPE",
@@ -104,7 +104,7 @@ def create_paired_comparison(baseline: pd.DataFrame, augmented: pd.DataFrame) ->
         "augmentation_method_baseline",
         "augmentation_method_augmented",
         "augmentation_ratio",
-        "n_synthetic_points",
+        "n_synthetic_series",
         "baseline_MAE",
         "augmented_MAE",
         "MAE_difference",

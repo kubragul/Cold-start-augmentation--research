@@ -7,8 +7,8 @@ available?**
 Using daily adjusted-close prices for 11 large-cap U.S. equities (2020–2024),
 the pipeline builds 1,419 rolling cold-start samples (4/8/12-week training
 windows, 28-trading-day horizon), forecasts each one with three transparent
-baselines, repeats the exercise with synthetic continuation points appended to
-the training window at three ratios, and compares the two with paired
+baselines, repeats the exercise with endpoint-preserving residual-bootstrap
+histories at three ratios, and compares the two with paired
 statistical tests.
 
 This repository is organized as an academic experiment rather than a software
@@ -18,9 +18,8 @@ product. The numbered scripts in `experiments/` define the execution order;
 ## Status
 
 The pipeline is fully reproducible end to end: a clean run regenerates every
-published number exactly. The **methodology is still under revision** — see
-[Known issue: forecast-window alignment](#known-issue-forecast-window-alignment)
-before citing any result from this repository.
+published number exactly. Synthetic histories remain on the observed training
+timeline, so every forecast starts at the true test-window origin.
 
 ## Installation
 
@@ -47,10 +46,10 @@ Or step by step:
 python experiments/01_download_data.py              # yfinance -> data/raw, data/processed
 python experiments/02_create_cold_start_scenarios.py # rolling train/test samples
 python experiments/03_run_baseline_experiments.py    # naive, moving average, linear trend
-python experiments/04_run_augmentation_experiments.py # + synthetic continuation, 3 ratios
+python experiments/04_run_augmentation_experiments.py # aligned bootstrap ensemble, 3 ratios
 python experiments/05_compare_results.py             # paired baseline vs augmented table
 python experiments/06_run_statistical_tests.py       # Wilcoxon + paired t, BH-FDR corrected
-python experiments/07_diagnostic_analysis.py         # where and how it fails
+python experiments/07_diagnostic_analysis.py         # subgroup diagnostics
 python experiments/08_generate_paper_figures.py      # paper-ready figures
 ```
 
@@ -69,7 +68,7 @@ experiments/                 numbered pipeline steps (entry points)
 src/
   data/                      yfinance download + cleaning
   preprocessing/             rolling cold-start scenario construction
-  augmentation/              statistical continuation augmentation
+  augmentation/              endpoint-preserving bootstrap augmentation
   models/                    naive / moving average / linear trend baselines
   evaluation/                MAE, RMSE, MAPE + paired statistical tests
   visualization/             paper figures
@@ -97,11 +96,14 @@ origin; the next 28 trading days are held out for evaluation only.
 linear trend (least-squares extrapolation). All three see the training window
 only.
 
-**Augmentation.** A linear trend is fitted to the training window, residual
-standard deviation is estimated from training residuals, and synthetic
-continuation points are drawn as trend + Gaussian noise and appended after the
-real observations. Ratios of 0.5×, 1.0× and 2.0× the training length are
-tested. The generator never receives test data.
+**Augmentation.** A linear trend is fitted to the training window and its
+residuals are resampled with replacement to create alternative histories over
+the same timestamps. A linear correction preserves the observed first and last
+prices. Each model forecasts separately from the real and synthetic histories;
+their forecasts are averaged. Ratios of 0.5×, 1.0× and 2.0× determine the
+number of synthetic histories relative to training length. The generator never
+receives test data, and no synthetic value is appended beyond the real forecast
+origin.
 
 **Evaluation.** MAE, RMSE and MAPE, compared pairwise per
 sample × model × ratio. Wilcoxon signed-rank is the primary test (forecast
@@ -111,44 +113,25 @@ reported.
 
 ## Result as currently computed
 
-Augmentation made forecasts substantially worse: mean MAPE rose from 6.44 to
-16.04 (+9.60 points), only 20.9% of 12,771 paired comparisons improved, and
-degradation grew monotonically with the augmentation ratio.
+Endpoint-preserving augmentation reduced mean MAPE from 6.4355 to 5.8162
+(-0.6193 points; -9.62%). The primary paired Wilcoxon test and the paired
+t-test both classify the overall change as significantly improved after
+Benjamini–Hochberg correction. Linear trend and moving average improve
+significantly; naive is unchanged because every synthetic history preserves the
+same real endpoint.
 
-## Known issue: forecast-window alignment
+## Forecast-window alignment
 
-The result above should not yet be read as evidence about synthetic data
-quality. In the current implementation the synthetic points are appended to the
-end of the training sequence, so the models treat them as observed history and
-forecast the *n_synthetic* steps that follow them — a window that starts up to
-120 trading days after the test window begins. Baseline and augmented forecasts
-are therefore evaluated against the same 28 days while predicting different
-calendar periods, and the offset grows with the augmentation ratio.
-
-A controlled check on the linear-trend model isolates the effect. Fitting the
-same augmented series but evaluating it over the indices the test set actually
-occupies removes the degradation entirely:
-
-| ratio | baseline MAPE | as implemented | time-aligned |
-|-------|---------------|----------------|--------------|
-| 0.5   | 8.291         | 12.160         | 8.294        |
-| 1.0   | 8.291         | 16.846         | 8.284        |
-| 2.0   | 8.291         | 26.877         | 8.301        |
-
-The improvement rate moves from 22.5%/16.7%/11.4% to roughly 49%/50%/47% — a
-coin flip, i.e. no measurable effect either way. The same offset drives the
-naive and moving-average results, since both forecast from the end of the
-augmented series.
-
-Resolving this is the next step for the study: either evaluate the synthetic
-continuation directly against the test window it overlaps, or restructure
-augmentation so the real endpoint is preserved (residual bootstrapping,
-return-space generation).
+An earlier pilot appended synthetic continuation values after the observed
+training endpoint and then compared forecasts from that later endpoint against
+the immediate test window. That time-index mismatch has been removed. The
+current implementation creates equal-length alternative histories, preserves
+the observed endpoint, and verifies this invariant in automated tests. Baseline
+and augmented forecasts now refer to exactly the same 28 trading days.
 
 ## Citation
 
-If you refer to this work, please cite it as a pilot study with the caveat
-above:
+If you refer to this work, please cite it as:
 
 ```bibtex
 @misc{coldstart_augmentation_2026,
@@ -156,8 +139,8 @@ above:
   title  = {Synthetic Time Series Augmentation for Cold-Start Trend
             Forecasting: A Finance Pilot Study},
   year   = {2026},
-  note   = {Pilot study; methodology under revision},
-  url    = {https://github.com/<your-username>/cold-start-augmentation-research}
+  note   = {Endpoint-preserving residual-bootstrap augmentation},
+  url    = {https://github.com/kubragul/Cold-start-augmentation--research}
 }
 ```
 

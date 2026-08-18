@@ -1,16 +1,32 @@
-# Methodology Notes
+# Methodology
 
-## Research Question
+## Research question
 
-Can statistical augmentation improve cold-start forecasting performance for financial time series with limited target-series history?
+Can endpoint-preserving statistical augmentation improve 28-trading-day
+forecasts when only 4, 8, or 12 weeks of target-series history are available?
 
-## Experimental Design
+## Data and scenarios
 
-- Define cold-start scenarios by varying available target-series observations.
-- Compare baseline forecasting methods against augmentation-assisted methods.
-- Evaluate using forecast error metrics and paired statistical summaries.
+The study uses adjusted-close prices for 11 large-cap U.S. equities from 2020
+through 2024. Rolling windows create 1,419 paired train/test scenarios. The test
+set is never passed to the generator or forecasting models.
 
-## Placeholder Assumptions
+## Endpoint-preserving augmentation
 
-- Synthetic panel data is used until real financial data access is finalized.
-- The initial augmentation method is a scaffold, not a validated method.
+A least-squares trend is fitted to each real training history. Training
+residuals are sampled with replacement to create alternative histories over
+the same indices. A linear correction anchors each synthetic history to the
+real first and last prices. Consequently, no synthetic observation lies beyond
+the forecast origin.
+
+For augmentation ratios 0.5, 1.0, and 2.0, the number of synthetic histories is
+the training length multiplied by the ratio. Naive, five-point moving-average,
+and linear-trend forecasts are produced independently for the real history and
+each synthetic history, then averaged.
+
+## Evaluation
+
+MAE, RMSE, and MAPE are compared pairwise against unaugmented forecasts for the
+same sample and model. Wilcoxon signed-rank is the primary test; paired t-tests
+are reported alongside. Benjamini-Hochberg correction controls FDR across
+grouped tests. Random seed 42 makes the pipeline deterministic.

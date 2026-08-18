@@ -1,4 +1,4 @@
-"""Step 07: diagnose why statistical augmentation worsened performance."""
+"""Step 07: diagnose where statistical augmentation helps or hurts."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ CASE_COLUMNS = [
     "model",
     "cold_start_weeks",
     "augmentation_ratio",
-    "n_synthetic_points",
+    "n_synthetic_series",
     "baseline_MAPE",
     "augmented_MAPE",
     "MAPE_difference",
@@ -170,59 +170,47 @@ def print_plain_english_summary(comparison: pd.DataFrame) -> None:
     outlier_count = int((comparison["percent_change_MAPE"] >= OUTLIER_PERCENT_CHANGE_THRESHOLD).sum())
     improvement_count = int(comparison["improved"].sum())
 
-    least_harmful_ratio = by_ratio.iloc[0]
-    most_harmful_ratio = by_ratio.iloc[-1]
-    least_harmful_model = by_model.iloc[0]
-    most_harmful_model = by_model.iloc[-1]
-    least_harmful_sector = by_sector.iloc[0]
-    most_harmful_sector = by_sector.iloc[-1]
-    least_harmful_window = by_window.iloc[0]
-    most_harmful_window = by_window.iloc[-1]
+    best_ratio, worst_ratio = by_ratio.iloc[0], by_ratio.iloc[-1]
+    best_model, worst_model = by_model.iloc[0], by_model.iloc[-1]
+    best_sector, worst_sector = by_sector.iloc[0], by_sector.iloc[-1]
+    best_window, worst_window = by_window.iloc[0], by_window.iloc[-1]
 
     print("\nPlain-English diagnostic summary")
     print(
         f"Augmentation improved {improvement_count} of {len(comparison)} paired comparisons "
-        f"({comparison['improved'].mean() * 100:.2f}%), but worsened the majority."
+        f"({comparison['improved'].mean() * 100:.2f}%)."
     )
     print(
-        f"It was least harmful at augmentation_ratio={least_harmful_ratio['augmentation_ratio']} "
-        f"(mean MAPE difference {least_harmful_ratio['mean_MAPE_difference']:.4f}) and most harmful "
-        f"at augmentation_ratio={most_harmful_ratio['augmentation_ratio']} "
-        f"(mean MAPE difference {most_harmful_ratio['mean_MAPE_difference']:.4f})."
+        f"The best mean effect is at augmentation_ratio={best_ratio['augmentation_ratio']} "
+        f"(MAPE difference {best_ratio['mean_MAPE_difference']:.4f}); the weakest is at "
+        f"ratio={worst_ratio['augmentation_ratio']} ({worst_ratio['mean_MAPE_difference']:.4f})."
     )
     print(
-        "Degradation increases monotonically with augmentation_ratio in this run, "
-        "which suggests that appending more synthetic continuation values moves the effective "
-        "training signal farther from the real cold-start window."
+        "All synthetic histories remain aligned to the real training window and preserve its endpoint."
     )
     print(
-        f"By model, the least harmful average effect is for {least_harmful_model['model']} "
-        f"(mean MAPE difference {least_harmful_model['mean_MAPE_difference']:.4f}); "
-        f"the most harmful is for {most_harmful_model['model']} "
-        f"({most_harmful_model['mean_MAPE_difference']:.4f})."
+        f"By model, the best average effect is for {best_model['model']} "
+        f"({best_model['mean_MAPE_difference']:.4f}); the weakest is for {worst_model['model']} "
+        f"({worst_model['mean_MAPE_difference']:.4f})."
     )
     print(
-        f"By sector, the least harmful average effect is in {least_harmful_sector['sector']} "
-        f"(mean MAPE difference {least_harmful_sector['mean_MAPE_difference']:.4f}); "
-        f"the most harmful is in {most_harmful_sector['sector']} "
-        f"({most_harmful_sector['mean_MAPE_difference']:.4f})."
+        f"By sector, the best average effect is in {best_sector['sector']} "
+        f"({best_sector['mean_MAPE_difference']:.4f}); the weakest is in {worst_sector['sector']} "
+        f"({worst_sector['mean_MAPE_difference']:.4f})."
     )
     print(
-        f"By cold-start length, degradation is smallest for {int(least_harmful_window['cold_start_weeks'])}-week "
-        f"windows and largest for {int(most_harmful_window['cold_start_weeks'])}-week windows."
+        f"By cold-start length, the best average effect is for {int(best_window['cold_start_weeks'])}-week "
+        f"windows and the weakest for {int(worst_window['cold_start_weeks'])}-week windows."
     )
     print(
-        "Naive and moving-average baselines are plausibly harmed because the synthetic continuation "
-        "values are appended after the real training window; these models depend heavily on the final "
-        "or most recent observations, so appended synthetic points can dominate their forecasts."
+        "The naive model is expected to be unchanged because every synthetic history shares the real endpoint."
     )
     print(
         f"There are {outlier_count} outlier cases with percent_change_MAPE >= "
-        f"{OUTLIER_PERCENT_CHANGE_THRESHOLD:.0f}%, indicating a substantial right tail of severe degradation."
+        f"{OUTLIER_PERCENT_CHANGE_THRESHOLD:.0f}%."
     )
     print(
-        "The negative result is broad across models, sectors, tickers, and cold-start windows rather than "
-        "being isolated to a single narrow subgroup."
+        "Subgroup tables should be read alongside the overall paired statistical tests."
     )
 
 
